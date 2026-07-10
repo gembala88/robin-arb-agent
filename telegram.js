@@ -102,8 +102,11 @@ export async function notifyAtomic({ symbol, dir, buyVenue, sellVenue, sizeEth, 
   const sw = parseSwap(receipt);
   const tokStr = sw ? tokN(sw.tokenAbs) : '?';
   const outWei = dir === 'A' && sw ? sw.ethAbs : 0n;
-  const abs = netEth < 0n ? -netEth : netEth;
-  const netSign = netEth >= 0n ? '+' : '−';
+  // NET from the receipt (sell ETH − buy size) for dir A — the contract-balance
+  // delta read stale (after==before) on the RPC and reported net 0.
+  const computedNet = (dir === 'A' && sw) ? (outWei - sizeEth) : netEth;
+  const abs = computedNet < 0n ? -computedNet : computedNet;
+  const netSign = computedNet >= 0n ? '+' : '−';
   const netUsd = ethUsd ? ` (${netSign}$${(Number(formatEther(abs)) * ethUsd).toFixed(2)})` : '';
   const sellValLine = dir === 'A'
     ? `<code>${tokStr} ${symbol}</code> → <code>${e6(outWei)} ETH</code>${usdParen(outWei)}`
