@@ -41,6 +41,26 @@ const CFG = {
   executor: process.env.EXECUTOR_ADDR || null,
   watchlist: process.env.WATCHLIST === '1',
 };
+
+// ===== CIRCUIT BREAKER =====
+const CB = { fails: 0, paused: false, pausedAt: 0, maxFails: Number(process.env.MAX_CONSECUTIVE_FAILS || 3), cooldownMin: Number(process.env.CIRCUIT_BREAKER_COOLDOWN_MIN || 30) };
+async function checkCircuitBreaker() {
+  if (!CB.paused) return true;
+  if (Date.now() - CB.pausedAt > CB.cooldownMin * 60 * 1000) {
+    CB.paused = false; CB.fails = 0;
+    console.log('circuit breaker auto-reset after cooldown');
+  }
+  return !CB.paused;
+}
+function recordFail() {
+  CB.fails++;
+  if (CB.fails >= CB.maxFails) {
+    CB.paused = true; CB.pausedAt = Date.now();
+    console.log(`!!! CIRCUIT BREAKER ACTIVE — ${CB.fails} consecutive fails`);
+    notifyError(`Circuit breaker active — ${CB.fails} consecutive tx failures. Auto-reset in ${CB.cooldownMin}min.`).catch(() => {});
+  }
+}
+
 const bpsDown = (x, bps) => x - (x * bps) / 10000n;
 const keyTuple = (k) => [k.currency0, k.currency1, k.fee, k.tickSpacing, k.hooks];
 const deadline = () => BigInt(Math.floor(Date.now() / 1000) + 120);
@@ -218,6 +238,18 @@ async function main() {
     if (bps >= CFG.minProfitBps) {
       console.log('>>> OPPORTUNITY', line);
       if (!CFG.live || !wallet) { console.log('    (idle: dry-run/no wallet)'); return; }
+      // Circuit breaker: pause after N consecutive failures
+      if (!await checkCircuitBreaker()) { console.log('    (paused — circuit breaker active)'); return; }
+      CB.fails = 0; // reset on any opportunity check (resets after cooldown too)
+      // Balance check: skip if executor/wallet can't cover size + gas
+      const bcAddr = CFG.executor || wallet.address;
+      const bcBal = await provider.getBalance(bcAddr).catch(() => 0n);
+      const bcGas = (gasPrice || 100000000n) * CFG.gasUnits;
+      const bcNeed = b.size + bcGas;
+      if (bcBal < bcNeed) {
+        console.log(`    (balance skip: ${formatEther(bcBal)} < ${formatEther(bcNeed)} = size ${formatEther(b.size)} + gas ${formatEther(bcGas)})`);
+        return;
+      }
       busy = true;
       try {
         // hard 120s cap: a hung RPC inside execute() must never leave busy=true
@@ -226,6 +258,7 @@ async function main() {
       } catch (e) {
         console.log('    exec FAILED:', e.shortMessage || e.message);
         notifyError(`${b.market.symbol} ${b.tag}: ${e.shortMessage || e.message}`).catch(() => {});
+        recordFail();
       } finally {
         busy = false;
         // non-blocking gas refresh — getFeeData must not hang the busy reset

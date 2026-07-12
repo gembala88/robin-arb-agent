@@ -1,6 +1,16 @@
 // config.js — all values VERIFIED on-chain (Robinhood Chain, chainId 4663)
 // Discovery done via RobinFun frontend bundle + on-chain eth_call / eth_getLogs.
 
+import fs from 'node:fs';
+
+// ===== USER CONFIG (Meridian-style: safe to edit, no secrets) =====
+let _uc = {};
+try {
+  _uc = JSON.parse(fs.readFileSync(new URL('./user-config.json', import.meta.url), 'utf8'));
+} catch {}
+export const UC = (key, def) => _uc[key] ?? def;
+export const UCW = (key, def) => { const w = _uc.scoreWeights; return w ? (w[key] ?? def) : def; };
+
 export const CHAIN = {
   id: 4663,
   name: 'robinhood',

@@ -9,6 +9,7 @@
     "live": "LIVE=1 node arb.js",
     "scan": "node scanner.js",
     "snapshot": "node snapshot.js",
+    "screener": "node screener.js",
     "discover": "node discover.mjs",
     "build:contract": "node scripts/compile.js",
     "deploy": "node deploy.js",

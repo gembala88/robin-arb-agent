@@ -8,4 +8,6 @@ build/
 logs/
 *.log
 watchlist.json
+screener_state.json
+screener_state.json.tmp
 .DS_Store
