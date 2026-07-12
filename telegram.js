@@ -5,6 +5,7 @@ const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT = process.env.TELEGRAM_CHAT_ID ? Number(String(process.env.TELEGRAM_CHAT_ID).trim()) : null;
 const S_TOKEN = process.env.SCREENER_BOT_TOKEN;
 const S_CHAT = process.env.SCREENER_CHAT_ID ? Number(String(process.env.SCREENER_CHAT_ID).trim()) : null;
+const S_CHANNEL = process.env.SCREENER_CHANNEL_ID ? Number(String(process.env.SCREENER_CHANNEL_ID).trim()) : null;
 const EXPLORER = 'https://robinhoodchain.blockscout.com/tx/';
 const SWAP_TOPIC = topicId('Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)');
 const coder = AbiCoder.defaultAbiCoder();
@@ -22,15 +23,21 @@ export async function tg(text) {
   } catch {}
 }
 
-export async function tgScreener(text) {
-  if (!screenerEnabled) return;
+async function _screenerSend(chatId, text) {
+  if (!S_TOKEN || !chatId) return;
   try {
     await fetch(`https://api.telegram.org/bot${S_TOKEN}/sendMessage`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chat_id: S_CHAT, text, parse_mode: 'HTML',
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML',
         disable_web_page_preview: true, link_preview_options: { is_disabled: true } }),
     });
   } catch {}
+}
+
+export async function tgScreener(text) {
+  if (!screenerEnabled && !S_CHANNEL) return;
+  if (screenerEnabled) await _screenerSend(S_CHAT, text);
+  if (S_CHANNEL && S_CHANNEL !== S_CHAT) await _screenerSend(S_CHANNEL, text);
 }
 
 // --- ETH/USD price ---
