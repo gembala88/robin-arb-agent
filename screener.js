@@ -86,26 +86,45 @@ function decodeFeeEvent(log) {
   return { token, amount };
 }
 
-async function getLogsChunked(provider, filter, from, to, step, retries = 0) {
+async function getLogsChunked(provider, filter, from, to, step) {
   if (!step) step = 200_000;
   const out = [];
   for (let s = from; s <= to; s += step) {
     const e = Math.min(s + step - 1, to);
-    try {
-      out.push(...await provider.getLogs({ ...filter, fromBlock: s, toBlock: e }));
-    } catch (err) {
-      const msg = (err.shortMessage || err.message || '').toLowerCase();
-      const isRetryable = msg.includes('429') || msg.includes('rate limit') || msg.includes('too many requests') || msg.includes('rate');
-      if (isRetryable && retries < 6) {
-        const delay = Math.min(1000 * Math.pow(2, retries), CFG.maxRetryDelay);
-        console.log(`  429 on blocks ${s}–${e} — backoff ${delay}ms (#${retries + 1})`);
-        await sleep(delay + Math.random() * 500);
-        out.push(...await getLogsChunked(provider, filter, s, e, step, retries + 1));
-      } else if (e > s) {
-        const m = (s + e) >> 1;
-        out.push(...await getLogsChunked(provider, filter, s, m));
-        out.push(...await getLogsChunked(provider, filter, m + 1, e));
-      } else throw err;
+    let cachedStep = step;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      try {
+        out.push(...await provider.getLogs({ ...filter, fromBlock: s, toBlock: e }));
+        break;
+      } catch (err) {
+        const msg = (err.shortMessage || err.message || '').toLowerCase();
+        const code = err.code;
+        // Rate limit → exponential backoff
+        if (code === 429 || msg.includes('429') || msg.includes('rate limit') || msg.includes('too many requests') || msg.includes('rate')) {
+          if (attempt >= 6) throw err;
+          const delay = Math.min(1000 * Math.pow(2, attempt), CFG.maxRetryDelay);
+          console.log(`  429 on blocks ${s}–${e} — backoff ${delay}ms (#${attempt + 1})`);
+          await sleep(delay + Math.random() * 500);
+          continue;
+        }
+        // Block-range too large (e.g. Alchemy free tier max 10 blocks)
+        if (code === -32600 || msg.includes('block range') || msg.includes('10 block') || msg.includes('free tier')) {
+          const newStep = Math.max(Math.floor(cachedStep / 2), 10);
+          console.log(`  range too large at blocks ${s}–${e} (${e-s+1}) — step ${cachedStep}→${newStep}`);
+          if (cachedStep <= 10) throw err; // can't go smaller
+          cachedStep = newStep;
+          // Re-process the current [s,e] range with smaller step, then break
+          out.push(...await getLogsChunked(provider, filter, s, e, cachedStep));
+          break;
+        }
+        // Generic error → binary search (last resort)
+        if (e > s) {
+          const m = (s + e) >> 1;
+          out.push(...await getLogsChunked(provider, filter, s, m));
+          out.push(...await getLogsChunked(provider, filter, m + 1, e));
+        } else throw err;
+        break;
+      }
     }
   }
   return out;
