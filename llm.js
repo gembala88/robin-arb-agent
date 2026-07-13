@@ -1,13 +1,26 @@
 import { formatEther } from 'ethers';
 
-// Provider-agnostic LLM layer. Default: NVIDIA NIM (free tier, OpenAI-compatible).
-// Claude is supported as alternative. Set LLM_PROVIDER=claude and CLAUDE_API_KEY.
+// Multi-key LLM layer with per-key cooldown + cross-provider fallback.
+// Order of priority: NVIDIA key 1 → NVIDIA key 2 → Claude (if key set).
+// Each key has its OWN cooldown — rate-limited keys are skipped for 5 min.
 
-const PROVIDER  = (process.env.LLM_PROVIDER || 'nvidia').toLowerCase();
-const NVIDIA_KEY = process.env.NVIDIA_API_KEY;
-const CLAUDE_KEY = process.env.CLAUDE_API_KEY;
 const NVIDIA_MODEL = process.env.LLM_MODEL || 'nvidia/llama-3.3-nemotron-super-49b-v1.5';
 const CLAUDE_MODEL = process.env.LLM_MODEL || 'claude-sonnet-4-20250514';
+
+// Provider profiles (built lazily so env overrides take effect)
+let _profiles = null;
+const _profileCooldowns = {};
+function _getProfiles() {
+  if (_profiles) return _profiles;
+  _profiles = [];
+  function add(name, apiKey, callFn, model) {
+    if (apiKey) _profiles.push({ name, apiKey, callFn, model });
+  }
+  add('nvidia-1', process.env.NVIDIA_API_KEY,     callNVIDIA, NVIDIA_MODEL);
+  add('nvidia-2', process.env.NVIDIA_API_KEY_2,   callNVIDIA, NVIDIA_MODEL);
+  add('claude',   process.env.CLAUDE_API_KEY,     callClaude, CLAUDE_MODEL);
+  return _profiles;
+}
 
 function buildPrompt(info, currentBlock, head, cfg) {
   const vol1h = Number(formatEther(computeVolume(info, currentBlock, cfg.volumeWindowHours, cfg.avgBlockTimeSec)));
@@ -58,38 +71,46 @@ function computeVolume(info, currentBlock, windowHours, blockTime) {
   return sum;
 }
 
-async function callNVIDIA(prompt) {
+async function callNVIDIA(prompt, apiKey, model) {
   const r = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      'authorization': `Bearer ${NVIDIA_KEY}`,
+      'authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: NVIDIA_MODEL,
+      model,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.1,
       max_tokens: 1024,
     }),
   });
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    throw new Error(`NVIDIA ${r.status}: ${body.slice(0, 120)}`);
+  }
   const j = await r.json();
   return j?.choices?.[0]?.message?.content || null;
 }
 
-async function callClaude(prompt) {
+async function callClaude(prompt, apiKey, model) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      'x-api-key': CLAUDE_KEY,
+      'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: CLAUDE_MODEL,
+      model,
       max_tokens: 1024,
       messages: [{ role: 'user', content: prompt }],
     }),
   });
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    throw new Error(`Claude ${r.status}: ${body.slice(0, 120)}`);
+  }
   const j = await r.json();
   return j?.content?.[0]?.text || null;
 }
@@ -105,14 +126,30 @@ function parseLLMResponse(text) {
 }
 
 export async function analyzeToken(info, currentBlock, head, cfg) {
-  const key = PROVIDER === 'claude' ? CLAUDE_KEY : NVIDIA_KEY;
-  if (!key) return null;
+  const profiles = _getProfiles();
+  if (!profiles.length) return null;
 
   const prompt = buildPrompt(info, currentBlock, head, cfg);
-  try {
-    const text = PROVIDER === 'claude' ? await callClaude(prompt) : await callNVIDIA(prompt);
-    return parseLLMResponse(text);
-  } catch {
-    return null;
+
+  for (const profile of profiles) {
+    const name = profile.name;
+    // Skip if this key is in cooldown (rate-limited)
+    if (_profileCooldowns[name] > Date.now()) continue;
+
+    try {
+      const text = await profile.callFn(prompt, profile.apiKey, profile.model);
+      if (text) return parseLLMResponse(text);
+      // Empty response — short cooldown (30s) before retrying
+      _profileCooldowns[name] = Date.now() + 30000;
+      console.log(`LLM: ${name} returned empty — cooldown 30s`);
+    } catch (err) {
+      const msg = err.message || '';
+      const isRateLimit = msg.includes('429') || msg.includes('rate') || msg.includes('quota') || msg.includes('Too Many Requests') || msg.includes('402');
+      const cooldownMs = isRateLimit ? 300000 : 60000; // 5min for rate-limit, 1min for other errors
+      _profileCooldowns[name] = Date.now() + cooldownMs;
+      console.log(`LLM fallback: ${name} failed (${msg.slice(0, 80)}) — cooldown ${cooldownMs / 1000}s`);
+    }
   }
+
+  return null; // All profiles exhausted or in cooldown
 }
