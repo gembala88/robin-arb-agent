@@ -8,8 +8,13 @@ let _uc = {};
 try {
   _uc = JSON.parse(fs.readFileSync(new URL('./user-config.json', import.meta.url), 'utf8'));
 } catch {}
-export const UC = (key, def) => _uc[key] ?? def;
-export const UCW = (key, def) => { const w = _uc.scoreWeights; return w ? (w[key] ?? def) : def; };
+function _require(key, val) {
+  if (val === undefined || val === null) throw new Error(`user-config.json: required key "${key}" not found`);
+  return val;
+}
+export const UC = (key) => _require(key, _uc[key]);
+export const UCW = (key) => { const w = _uc.scoreWeights; return _require('scoreWeights.'+key, w ? w[key] : undefined); };
+export const UCS = (key) => { const s = _uc.safety; return _require('safety.'+key, s ? s[key] : undefined); };
 
 export const CHAIN = {
   id: 4663,

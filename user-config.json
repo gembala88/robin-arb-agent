@@ -1,6 +1,11 @@
 {
-  "_comment": "User-editable tunables. .env stores SECRETS only. This file is safe to commit (no keys).",
+  "_comment": [
+    "All settings LIVE here — NO hardcoded defaults in code.",
+    ".env stores SECRETS only (API keys, bot tokens).",
+    "This file is safe to commit (no secrets)."
+  ],
 
+  "--- SCREENING CRITERIA ---": "Minimum thresholds a token must pass",
   "minGraduationPct": 10,
   "minAgeHours": 1,
   "minUniqueBuyers": 3,
@@ -9,21 +14,26 @@
   "maxSellBuyRatio": 0.8,
   "volumeDropThreshold": 0.5,
 
+  "--- TIMING ---": "All timing intervals in milliseconds / seconds / hours",
   "pollMs": 30000,
   "refreshCurvesSec": 120,
   "avgBlockTimeSec": 2,
   "volumeWindowHours": 1,
   "stateSaveInterval": 60000,
   "periodicHours": 6,
+
+  "--- HISTORICAL SCAN ---": "Initial scan tuning (rate-limit safe)",
   "scanChunkSize": 200000,
   "scanDelayMs": 300,
   "maxRetryDelay": 30000,
 
+  "--- LLM EVALUATION ---": "AI agent for advanced token analysis",
   "llmScoreMin": 50,
   "llmCooldownHours": 6,
   "llmProvider": "nvidia",
   "llmModel": "nvidia/llama-3.3-nemotron-super-49b-v1.5",
 
+  "--- SCORE WEIGHTS ---": "Composite score = weighted sum of these factors",
   "scoreWeights": {
     "graduation": 0.30,
     "buyers": 0.40,
@@ -34,6 +44,17 @@
     "sellRatio": 0.15
   },
 
+  "--- SAFETY / SCAM PROTECTION ---": "Additional filters to reject scam tokens",
+  "safety": {
+    "maxTaxBps": 200,
+    "minLiquidityEth": 0.005,
+    "maxSellBuyRatio": 0.9,
+    "minBuyerDistribution": 5,
+    "honeypotTestEnabled": false,
+    "minUniqueBuyersSafety": 1
+  },
+
+  "--- ARB BOT (shared) ---": "Used by arb.js, not screener.js",
   "maxConsecutiveFails": 3,
   "circuitBreakerCooldownMin": 30
 }

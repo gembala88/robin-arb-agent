@@ -2,7 +2,7 @@ import 'dotenv/config';
 import fs from 'node:fs';
 import { Contract, Interface, id as topicId, getAddress, formatEther, AbiCoder } from 'ethers';
 import { makeProvider } from './provider.js';
-import { V4, UC, UCW } from './config.js';
+import { V4, UC, UCW, UCS } from './config.js';
 import { tg, tgScreener, setCommandCtx, startCommandHandler } from './telegram.js';
 import { analyzeToken } from './llm.js';
 
@@ -24,26 +24,44 @@ const SELL_TOPIC = topicId(SELL_SIG);
 const FEE_TOPIC  = topicId(FEE_SIG);
 const ALL_TOPICS = [[BUY_TOPIC, SELL_TOPIC, FEE_TOPIC]];
 
-// ===== SCREENING CONFIG (user-config.json with env override) =====
+// ===== SCREENING CONFIG (ALL from user-config.json — NO code defaults) =====
+// Env vars SCREENER_* override user-config.json at runtime without file edits
+function _env(key, envKey) {
+  if (process.env[envKey]) return Number(process.env[envKey]);
+  return UC(key);
+}
+function _envS(key) {
+  return process.env['SCREENER_'+key.toUpperCase()] ? Number(process.env['SCREENER_'+key.toUpperCase()]) : UCS(key);
+}
+
 const CFG = {
-  get minGraduationPct() { return Number(process.env.SCREENER_MIN_GRADUATION ?? UC('minGraduationPct', 10)); },
-  get minAgeHours() { return Number(process.env.SCREENER_MIN_AGE_HOURS ?? UC('minAgeHours', 1)); },
-  get minUniqueBuyers() { return Number(process.env.SCREENER_MIN_BUYERS ?? UC('minUniqueBuyers', 3)); },
-  get minVolumeEth() { return Number(process.env.SCREENER_MIN_VOLUME_ETH ?? UC('minVolumeEth', 0.1)); },
-  get pollMs() { return Number(process.env.SCREENER_POLL_MS ?? UC('pollMs', 30000)); },
-  get refreshCurvesSec() { return Number(process.env.SCREENER_REFRESH_SEC ?? UC('refreshCurvesSec', 120)); },
-  get avgBlockTimeSec() { return Number(process.env.SCREENER_BLOCK_TIME ?? UC('avgBlockTimeSec', 2)); },
-  get volumeWindowHours() { return Number(process.env.SCREENER_VOLUME_WINDOW_HOURS ?? UC('volumeWindowHours', 1)); },
-  get stateSaveInterval() { return Number(process.env.SCREENER_SAVE_INTERVAL ?? UC('stateSaveInterval', 60000)); },
-  get minBuyerDistribution() { return Number(process.env.SCREENER_MIN_DISTRIBUTION ?? UC('minBuyerDistribution', 10)); },
-  get maxSellBuyRatio() { return Number(process.env.SCREENER_MAX_SELL_BUY_RATIO ?? UC('maxSellBuyRatio', 0.8)); },
-  get volumeDropThreshold() { return Number(process.env.SCREENER_VOL_DROP_THRESHOLD ?? UC('volumeDropThreshold', 0.5)); },
-  get llmScoreMin() { return Number(process.env.SCREENER_LLM_SCORE_MIN ?? UC('llmScoreMin', 50)); },
-  get llmCooldownHours() { return Number(process.env.SCREENER_LLM_COOLDOWN_HOURS ?? UC('llmCooldownHours', 6)); },
-  get periodicHours() { return Number(process.env.SCREENER_PERIODIC_HOURS ?? UC('periodicHours', 6)); },
-  get scanChunkSize() { return Number(process.env.SCREENER_SCAN_CHUNK ?? UC('scanChunkSize', 200000)); },
-  get scanDelayMs() { return Number(process.env.SCREENER_SCAN_DELAY ?? UC('scanDelayMs', 300)); },
-  get maxRetryDelay() { return Number(process.env.SCREENER_MAX_RETRY ?? UC('maxRetryDelay', 30000)); },
+  get minGraduationPct() { return _env('minGraduationPct', 'SCREENER_MIN_GRADUATION'); },
+  get minAgeHours() { return _env('minAgeHours', 'SCREENER_MIN_AGE_HOURS'); },
+  get minUniqueBuyers() { return _env('minUniqueBuyers', 'SCREENER_MIN_BUYERS'); },
+  get minVolumeEth() { return _env('minVolumeEth', 'SCREENER_MIN_VOLUME_ETH'); },
+  get pollMs() { return _env('pollMs', 'SCREENER_POLL_MS'); },
+  get refreshCurvesSec() { return _env('refreshCurvesSec', 'SCREENER_REFRESH_SEC'); },
+  get avgBlockTimeSec() { return _env('avgBlockTimeSec', 'SCREENER_BLOCK_TIME'); },
+  get volumeWindowHours() { return _env('volumeWindowHours', 'SCREENER_VOLUME_WINDOW_HOURS'); },
+  get stateSaveInterval() { return _env('stateSaveInterval', 'SCREENER_SAVE_INTERVAL'); },
+  get minBuyerDistribution() { return _env('minBuyerDistribution', 'SCREENER_MIN_DISTRIBUTION'); },
+  get maxSellBuyRatio() { return _env('maxSellBuyRatio', 'SCREENER_MAX_SELL_BUY_RATIO'); },
+  get volumeDropThreshold() { return _env('volumeDropThreshold', 'SCREENER_VOL_DROP_THRESHOLD'); },
+  get llmScoreMin() { return _env('llmScoreMin', 'SCREENER_LLM_SCORE_MIN'); },
+  get llmCooldownHours() { return _env('llmCooldownHours', 'SCREENER_LLM_COOLDOWN_HOURS'); },
+  get periodicHours() { return _env('periodicHours', 'SCREENER_PERIODIC_HOURS'); },
+  get scanChunkSize() { return _env('scanChunkSize', 'SCREENER_SCAN_CHUNK'); },
+  get scanDelayMs() { return _env('scanDelayMs', 'SCREENER_SCAN_DELAY'); },
+  get maxRetryDelay() { return _env('maxRetryDelay', 'SCREENER_MAX_RETRY'); },
+  // Safety settings from user-config.json → "safety" section
+  get safety() { return {
+    get maxTaxBps() { return _envS('maxTaxBps'); },
+    get minLiquidityEth() { return _envS('minLiquidityEth'); },
+    get maxSellBuyRatio() { return _envS('maxSellBuyRatio'); },
+    get minBuyerDistribution() { return _envS('minBuyerDistribution'); },
+    get honeypotTestEnabled() { return !!UCS('honeypotTestEnabled'); },
+    get minUniqueBuyersSafety() { return _envS('minUniqueBuyersSafety'); },
+  }; },
 };
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -291,15 +309,15 @@ function computeScore(info, currentBlock) {
   const sellEth = Number(formatEther(sellVol1h.sum));
   if (volEth > 0) sellBuyRatio = sellEth / volEth;
 
-  // Composite score (0-100) — weights from user-config.json
-  const W = (k, d) => UCW(k, d);
+  // Composite score (0-100) — weights from user-config.json (NO defaults)
+  const W = (k) => UCW(k);
   let score = 0;
-  score += Math.min(grad, 100) * W('graduation', 0.30);
-  score += Math.min(buyerCount, W('buyerCap', 50)) * W('buyers', 0.40);
-  if (volEth > 0) score += Math.min(Math.log10(volEth * 1000 + 1) * W('volumeScale', 6), W('volumeCap', 20));
-  const distScore = Math.max(0, 100 - topBuyerPct) * W('distribution', 0.15);
+  score += Math.min(grad, 100) * W('graduation');
+  score += Math.min(buyerCount, W('buyerCap')) * W('buyers');
+  if (volEth > 0) score += Math.min(Math.log10(volEth * 1000 + 1) * W('volumeScale'), W('volumeCap'));
+  const distScore = Math.max(0, 100 - topBuyerPct) * W('distribution');
   score += distScore;
-  const sellScore = Math.max(0, (1 - sellBuyRatio)) * (W('sellRatio', 0.15) * 100);
+  const sellScore = Math.max(0, (1 - sellBuyRatio)) * (W('sellRatio') * 100);
   score += sellScore;
 
   return {
@@ -315,8 +333,11 @@ function computeScore(info, currentBlock) {
   };
 }
 
-// ===== SCREENING CRITERIA =====
+// ===== SCREENING + SAFETY CRITERIA (ALL from user-config.json) =====
 function checkCriteria(info, metrics) {
+  const S = CFG.safety;
+  const realEth = Number(formatEther(BigInt(info.curveRealEth || '0')));
+  const feeBps = Number(info.curveFeeBps || info.tradingFeeBps || 0);
   const passes = {
     graduation: metrics.grad >= CFG.minGraduationPct,
     age: metrics.ageHours >= CFG.minAgeHours,
@@ -324,6 +345,12 @@ function checkCriteria(info, metrics) {
     volume: metrics.volume1hEth >= CFG.minVolumeEth,
     distribution: metrics.topBuyerPct <= (100 - CFG.minBuyerDistribution),
     sellBuyRatio: metrics.sellBuyRatio <= CFG.maxSellBuyRatio,
+    // Safety checks
+    safebuyers: metrics.buyerCount >= S.minUniqueBuyersSafety,
+    safetax: feeBps <= S.maxTaxBps,
+    safeliquidity: realEth >= S.minLiquidityEth,
+    safesellratio: metrics.sellBuyRatio <= S.maxSellBuyRatio,
+    safedistribution: metrics.topBuyerPct <= (100 - S.minBuyerDistribution),
   };
   const allOk = Object.values(passes).every(Boolean);
   return { passes, allOk };
@@ -679,6 +706,7 @@ async function refreshAllCurves(provider) {
       info.curveTokenReserve = cs.tokenReserve.toString();
       info.curveRaiseTarget = cs.raiseTarget.toString();
       info.curveLpEth = cs.lpEth.toString();
+      info.curveFeeBps = cs.feeBps;
       updated++;
     } else {
       info.lastActive = false;
