@@ -194,7 +194,7 @@ async function refreshCurveState(tokenAddr, factoryAddr, provider) {
       return {
         virtualEth: d.virtualEth, realEth: d.realEth,
         tokenReserve: d.tokenReserve, raiseTarget: d.raiseTarget,
-        lpEth: d.lpEth, feeBps: d.tradingFeeBps,
+        lpEth: d.lpEth, feeBps: Number(d.tradingFeeBps),
         gradPct: pct, active: d.realEth < d.raiseTarget,
       };
     }
@@ -507,7 +507,8 @@ async function loadState() {
 
 function saveState() {
   const tmp = STATE_FILE + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(state, null, 2));
+  const replacer = (k, v) => typeof v === 'bigint' ? v.toString() : v;
+  fs.writeFileSync(tmp, JSON.stringify(state, replacer, 2));
   fs.renameSync(tmp, STATE_FILE);
 }
 
