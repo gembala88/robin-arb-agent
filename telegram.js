@@ -87,10 +87,11 @@ export async function notifyStartup(mode, markets) {
 
 const usdParen = (x) => { const u = usdOf(x); return u ? ` (${u})` : ''; };
 
-export async function notifyBuy({ symbol, venue, ethIn, tokens, hash }) {
+export async function notifyBuy({ symbol, token, venue, ethIn, tokens, hash }) {
   await refreshEthUsd();
+  const tag = token ? ` (${token.slice(0,8)}&hellip;)` : '';
   return tg(card([
-    `🟢 <b>${symbol} Buy</b>`,
+    `🟢 <b>${symbol}${tag} Buy</b>`,
     ``,
     `🟢 <b>BUY</b> @ ${venue}`,
     `<code>${e6(ethIn)} ETH</code>${usdParen(ethIn)} → <code>${tokN(tokens)} ${symbol}</code>`,
@@ -98,10 +99,11 @@ export async function notifyBuy({ symbol, venue, ethIn, tokens, hash }) {
     `🔗 ${txLink(hash)}`,
   ]));
 }
-export async function notifySell({ symbol, venue, tokens, ethOut, hash }) {
+export async function notifySell({ symbol, token, venue, tokens, ethOut, hash }) {
   await refreshEthUsd();
+  const tag = token ? ` (${token.slice(0,8)}&hellip;)` : '';
   return tg(card([
-    `🔴 <b>${symbol} Sell</b>`,
+    `🔴 <b>${symbol}${tag} Sell</b>`,
     ``,
     `🔴 <b>SELL</b> @ ${venue}`,
     `<code>${tokN(tokens)} ${symbol}</code> → <code>${e6(ethOut)} ETH</code>${usdParen(ethOut)}`,
@@ -110,7 +112,7 @@ export async function notifySell({ symbol, venue, tokens, ethOut, hash }) {
   ]));
 }
 
-export async function notifyAtomic({ symbol, dir, buyVenue, sellVenue, sizeEth, receipt, netEth }) {
+export async function notifyAtomic({ symbol, token, dir, buyVenue, sellVenue, sizeEth, receipt, netEth }) {
   await refreshEthUsd();
   const sw = parseSwap(receipt);
   const tokStr = sw ? tokN(sw.tokenAbs) : '?';
@@ -119,11 +121,12 @@ export async function notifyAtomic({ symbol, dir, buyVenue, sellVenue, sizeEth, 
   const abs = computedNet < 0n ? -computedNet : computedNet;
   const netSign = computedNet >= 0n ? '+' : '\u2212';
   const netUsd = ethUsd ? ` (${netSign}$${(Number(formatEther(abs)) * ethUsd).toFixed(2)})` : '';
+  const tag = token ? ` (${token.slice(0,8)}&hellip;)` : '';
   const sellValLine = dir === 'A'
     ? `<code>${tokStr} ${symbol}</code> \u2192 <code>${e6(outWei)} ETH</code>${usdParen(outWei)}`
     : `<code>${tokStr} ${symbol}</code> \u2192 curve`;
   await tg(card([
-    `🟢 <b>${symbol} Trade</b>`,
+    `🟢 <b>${symbol}${tag} Trade</b>`,
     ``,
     `🟢 <b>BUY</b> @ ${buyVenue}`,
     `<code>${e6(sizeEth)} ETH</code>${usdParen(sizeEth)} \u2192 <code>${tokStr} ${symbol}</code>`,
@@ -243,7 +246,7 @@ async function cmdTop(chatId, n = 5) {
   const lines = [`<b>🏆 Top ${sorted.length} Tokens</b>\n`];
   for (let i = 0; i < sorted.length; i++) {
     const t = sorted[i];
-    lines.push(`${i + 1}. <b>${t.symbol}</b> — score ${t.compositeScore}/100`);
+    lines.push(`${i + 1}. <b>${t.symbol}</b> (<code>${t.token.slice(0,10)}&hellip;</code>) — score ${t.compositeScore}/100`);
     lines.push(`   grad: ${t.lastGradPct.toFixed(1)}% | buyers: ${t.buyers.length} | vol 1h: ${(t.volume1hEth || 0).toFixed(4)} ETH`);
     if (t.llmDecision) {
       lines.push(`   🤖 LLM: ${t.llmDecision.decision} (${t.llmDecision.confidence})`);

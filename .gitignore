@@ -10,4 +10,6 @@ logs/
 watchlist.json
 screener_state.json
 screener_state.json.tmp
+lp_state.json
+lp_state.json
 .DS_Store

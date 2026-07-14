@@ -12,7 +12,15 @@ function _require(key, val) {
   if (val === undefined || val === null) throw new Error(`user-config.json: required key "${key}" not found`);
   return val;
 }
-export const UC = (key) => _require(key, _uc[key]);
+export const UC = (key) => {
+  const parts = key.split('.');
+  let val = _uc;
+  for (const p of parts) {
+    if (val === undefined || val === null) break;
+    val = val[p];
+  }
+  return _require(key, val);
+};
 export const UCW = (key) => { const w = _uc.scoreWeights; return _require('scoreWeights.'+key, w ? w[key] : undefined); };
 export const UCS = (key) => { const s = _uc.safety; return _require('safety.'+key, s ? s[key] : undefined); };
 
@@ -80,6 +88,42 @@ export const POOLS = [
     },
   },
 ];
+
+// ===== V3 UNISWAP (Official Uniswap V3 deployment on Robinhood Chain) =====
+// Addresses from developers.uniswap.org/docs/protocols/v3/deployments/v3-robinhood-chain-deployments
+export const V3 = {
+  factory:      '0x1f7d7550b1b028f7571e69a784071f0205fd2efa',
+  nfpm:         '0x73991a25c818bf1f1128deaab1492d45638de0d3',
+  swapRouter02: '0xcaf681a66d020601342297493863e78c959e5cb2',
+  quoterV2:     '0x33e885ed0ec9bf04ecfb19341582aadcb4c8a9e7',
+  nftDescriptor:'0x6f84dae9c064ff453e5c8af51efb819f8f610225',
+};
+// ===== V4 NFPM (Verified "PositionManager" on Blockscout) =====
+export const V4_NFPM = '0x58daec3116aae6d93017baaea7749052e8a04fa7';
+
+// ===== LP POOL DEFINITIONS (for deposit/withdraw) =====
+// V3: CASHCAT/WETH 1% — verified: pool.factory() = V3 factory
+export const LP_V3_CASHCAT_WETH = {
+  token0: '0x020bfc650a365f8bb26819deaabf3e21291018b4', // CASHCAT
+  token1: '0x0bd7d308f8e1639fab988df18a8011f41eacad73', // WETH
+  fee: 10000, // 1%
+  pool: '0xa70fc67c9f69da90b63a0e4c05d229954574e313',
+  symbol: 'CASHCAT/WETH-1%',
+};
+
+// V4: CASHCAT/USDG 0.5% — most liquid V4 fee tier for this pair
+// PoolKey: currency0=CASHCAT (lower addr), currency1=USDG, fee=5000, tickSpacing=10, hooks=0x0
+export const LP_V4_CASHCAT_USDG = {
+  key: {
+    currency0: '0x020bfc650a365f8bb26819deaabf3e21291018b4',
+    currency1: '0x5fc5360d0400a0fd4f2af552add042d716f1d168',
+    fee: 5000,
+    tickSpacing: 10,
+    hooks: '0x0000000000000000000000000000000000000000',
+  },
+  poolId: null, // computed at runtime
+  symbol: 'CASHCAT/USDG-0.5%',
+};
 
 // backward-compat: first pool
 export const POOL_KEY = POOLS[0].key;

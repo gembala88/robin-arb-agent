@@ -42,6 +42,45 @@ export const STATEVIEW_ABI = [
   'function getLiquidity(bytes32 poolId) view returns (uint128 liquidity)',
 ];
 
+// --- V3 SwapRouter02 ABI ---
+export const V3_SWAP_ROUTER_ABI = [
+  'function exactInputSingle(tuple(address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96) params) payable returns (uint256 amountOut)',
+  'function WETH9() view returns (address)',
+  'function factory() view returns (address)',
+];
+
+// --- V3 QuoterV2 ABI (for simulations) ---
+export const V3_QUOTERV2_ABI = [
+  'function quoteExactInputSingle(tuple(address tokenIn, address tokenOut, uint256 amountIn, uint24 fee, uint160 sqrtPriceLimitX96) params) returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)',
+];
+
+// --- V3 NFPM ABI (standard Uniswap V3) ---
+export const V3_NFPM_ABI = [
+  'function mint(tuple(address token0, address token1, uint24 fee, int24 tickLower, int24 tickUpper, uint256 amount0Desired, uint256 amount1Desired, uint256 amount0Min, uint256 amount1Min, address recipient, uint256 deadline) params) payable returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)',
+  'function increaseLiquidity(tuple(uint256 tokenId, uint256 amount0Desired, uint256 amount1Desired, uint256 amount0Min, uint256 amount1Min, uint256 deadline) params) payable returns (uint128 liquidity, uint256 amount0, uint256 amount1)',
+  'function decreaseLiquidity(tuple(uint256 tokenId, uint128 liquidity, uint256 amount0Min, uint256 amount1Min, uint256 deadline) params) payable returns (uint256 amount0, uint256 amount1)',
+  'function collect(tuple(uint256 tokenId, address recipient, uint128 amount0Max, uint128 amount1Max) params) payable returns (uint256 amount0, uint256 amount1)',
+  'function burn(uint256 tokenId) payable',
+  'function positions(uint256 tokenId) view returns (uint96 nonce, address operator, address token0, address token1, uint24 fee, int24 tickLower, int24 tickUpper, uint128 liquidity, uint256 feeGrowthInside0LastX128, uint256 feeGrowthInside1LastX128, uint128 tokensOwed0, uint128 tokensOwed1)',
+  'function factory() view returns (address)',
+];
+
+// --- V4 NFPM ABI (custom Robinhood fork, verified on Blockscout) ---
+export const V4_NFPM_ABI = [
+  'function modifyLiquidities(bytes unlockData, uint256 deadline) payable',
+  'function modifyLiquiditiesWithoutUnlock(bytes actions, bytes[] params) payable',
+  'function multicall(bytes[] data) payable returns (bytes[] results)',
+  'function positions(uint256 tokenId) view returns (uint96 nonce, address operator, address token0, address token1, uint24 fee, int24 tickLower, int24 tickUpper, uint128 liquidity, uint256 feeGrowthInside0LastX128, uint256 feeGrowthInside1LastX128, uint128 tokensOwed0, uint128 tokensOwed1)',
+  'function ownerOf(uint256 tokenId) view returns (address)',
+  'function balanceOf(address owner) view returns (uint256)',
+];
+
+// V4 PoolManager minimal ABI for slot0/liquidity queries
+export const V4_POOLMANAGER_ABI = [
+  'function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee)',
+  'function getLiquidity(bytes32 poolId) view returns (uint128 liquidity)',
+];
+
 // --- Universal Router V4 command/action constants ---
 const CMD_V4_SWAP = 0x10;
 const ACT_SWAP_EXACT_IN_SINGLE = 0x06;

@@ -178,14 +178,14 @@ async function main() {
       // and stall the bot past the window (missed a live opportunity). Net is
       // computed from the receipt in notifyAtomic, so no post-fire balance read.
       const minTok = bpsDown(b.tok, CFG.slippageBps);
-      console.log(`  [atomic ${b.dir}] ${b.market.symbol} pool=${b.pool.name} size=${formatEther(b.size)}`);
+      console.log(`  [atomic ${b.dir}] ${b.market.symbol} (${b.market.token.slice(0,8)}…) pool=${b.pool.name} size=${formatEther(b.size)}`);
       const call = b.dir === 'A'
         ? executor.curveToV4(token, b.size, minTok, keyTuple(b.pool.key), minEth, minProfit)
         : executor.v4ToCurve(token, b.size, minTok, keyTuple(b.pool.key), minEth, minProfit);
       const rc = await (await call).wait();
       console.log('  tx', rc.hash);
       // fire-and-forget so a notif hiccup can never block/crash the trade loop
-      notifyAtomic({ symbol: b.market.symbol, dir: b.dir, buyVenue: b.dir === 'A' ? 'curve' : `V4 ${b.pool.name}`, sellVenue: b.dir === 'A' ? `V4 ${b.pool.name}` : 'curve', sizeEth: b.size, receipt: rc, netEth: 0n }).catch(() => {});
+      notifyAtomic({ symbol: b.market.symbol, token: b.market.token, dir: b.dir, buyVenue: b.dir === 'A' ? 'curve' : `V4 ${b.pool.name}`, sellVenue: b.dir === 'A' ? `V4 ${b.pool.name}` : 'curve', sizeEth: b.size, receipt: rc, netEth: 0n }).catch(() => {});
       return;
     }
     await ensureEOA(token);
@@ -197,10 +197,10 @@ async function main() {
     const token = b.market.token, t = erc(token);
     const q = await curve.quoteBuy(token, b.size);
     const before = await t.balanceOf(wallet.address);
-    console.log(`  [A] buy curve ${b.market.symbol} ${formatEther(b.size)} ETH`);
+    console.log(`  [A] buy curve ${b.market.symbol} (${b.market.token.slice(0,8)}…) ${formatEther(b.size)} ETH`);
     const buyRc = await (await curve.buy(token, bpsDown(q, CFG.slippageBps), { value: b.size })).wait();
     const got = (await t.balanceOf(wallet.address)) - before;
-    await notifyBuy({ symbol: b.market.symbol, venue: 'curve', ethIn: b.size, tokens: got, hash: buyRc.hash });
+    await notifyBuy({ symbol: b.market.symbol, token: b.market.token, venue: 'curve', ethIn: b.size, tokens: got, hash: buyRc.hash });
     const target = b.size + gasCost + (b.size * CFG.minProfitBps) / 10000n;
     try {
       const sw = buildV4Swap({ zeroForOne: false, amountIn: got, amountOutMin: target, deadline: deadline(), key: b.pool.key });
@@ -208,7 +208,7 @@ async function main() {
       const sellRc = await (await router.execute(sw.commands, sw.inputs, sw.deadline, { value: sw.value })).wait();
       console.log('  PROFIT tx', sellRc.hash);
       const s = parseSwap(sellRc);
-      await notifySell({ symbol: b.market.symbol, venue: `V4 ${b.pool.name}`, tokens: got, ethOut: s ? s.ethAbs : 0n, hash: sellRc.hash });
+      await notifySell({ symbol: b.market.symbol, token: b.market.token, venue: `V4 ${b.pool.name}`, tokens: got, ethOut: s ? s.ethAbs : 0n, hash: sellRc.hash });
     } catch (e) {
       console.log('  missed window -> unwind on curve:', e.shortMessage || e.message);
       const minEth = bpsDown(await curve.quoteSell(token, got), CFG.slippageBps);
@@ -221,16 +221,16 @@ async function main() {
     const token = b.market.token, t = erc(token);
     const before = await t.balanceOf(wallet.address);
     const sw = buildV4Swap({ zeroForOne: true, amountIn: b.size, amountOutMin: bpsDown(b.tok, CFG.slippageBps), deadline: deadline(), key: b.pool.key });
-    console.log(`  [B] buy V4 ${b.pool.name} ${b.market.symbol} ${formatEther(b.size)} ETH`);
+    console.log(`  [B] buy V4 ${b.pool.name} ${b.market.symbol} (${b.market.token.slice(0,8)}…) ${formatEther(b.size)} ETH`);
     const buyRc = await (await router.execute(sw.commands, sw.inputs, sw.deadline, { value: sw.value })).wait();
     const got = (await t.balanceOf(wallet.address)) - before;
-    await notifyBuy({ symbol: b.market.symbol, venue: `V4 ${b.pool.name}`, ethIn: b.size, tokens: got, hash: buyRc.hash });
+    await notifyBuy({ symbol: b.market.symbol, token: b.market.token, venue: `V4 ${b.pool.name}`, ethIn: b.size, tokens: got, hash: buyRc.hash });
     const qSell = await curve.quoteSell(token, got);
     const minEth = bpsDown(qSell, CFG.slippageBps);
     console.log(`  [B] sell curve ${formatEther(got)} tok, min ${formatEther(minEth)} ETH`);
     const sellRc = await (await curve.sell(token, got, minEth)).wait();
     console.log('  done tx', sellRc.hash);
-    await notifySell({ symbol: b.market.symbol, venue: 'curve', tokens: got, ethOut: qSell, hash: sellRc.hash });
+    await notifySell({ symbol: b.market.symbol, token: b.market.token, venue: 'curve', tokens: got, ethOut: qSell, hash: sellRc.hash });
   }
 
   let busy = false, lastLog = 0, lastGasRefresh = 0;
@@ -245,7 +245,7 @@ async function main() {
     if (!all.length) return;
     const b = all[0];
     const bps = b.size > 0n ? (b.net * 10000n) / b.size : 0n;
-    const line = `${new Date().toISOString()} [${trigger}] best=${b.market.symbol} ${b.tag}@${b.pool?.name} size=${formatEther(b.size)} net=${formatEther(b.net)} (${bps} bps)`;
+    const line = `${new Date().toISOString()} [${trigger}] best=${b.market.symbol} (${b.market.token.slice(0,8)}…) ${b.tag}@${b.pool?.name} size=${formatEther(b.size)} net=${formatEther(b.net)} (${bps} bps)`;
     if (bps >= CFG.minProfitBps) {
       console.log('>>> OPPORTUNITY', line);
       if (!CFG.live || !wallet) { console.log('    (idle: dry-run/no wallet)'); return; }
@@ -268,7 +268,7 @@ async function main() {
         await Promise.race([execute(b), new Promise((_, rej) => setTimeout(() => rej(new Error('execute timeout 120s')), 120000))]);
       } catch (e) {
         console.log('    exec FAILED:', e.shortMessage || e.message);
-        notifyError(`${b.market.symbol} ${b.tag}: ${e.shortMessage || e.message}`).catch(() => {});
+        notifyError(`${b.market.symbol} (${b.market.token.slice(0,8)}…) ${b.tag}: ${e.shortMessage || e.message}`).catch(() => {});
         recordFail();
       } finally {
         busy = false;

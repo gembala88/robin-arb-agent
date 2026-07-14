@@ -374,7 +374,7 @@ async function checkMilestone(info, metrics) {
       const ethTarget = formatEther(BigInt(info.curveRaiseTarget || '0'));
       const emoji = ms === 100 ? '🎓' : ms >= 75 ? '🚀' : ms >= 50 ? '🔥' : '📈';
       await tgScreener([
-        `${emoji} <b>${info.symbol}</b> reached <b>${ms}%</b> graduation!`,
+        `${emoji} <b>${info.symbol}</b> (<code>${info.token.slice(0,10)}&hellip;</code>) reached <b>${ms}%</b> graduation!`,
         `<code>${info.token}</code>`,
         ``,
         `realEth: ${ethReal} ETH / ${ethTarget} ETH target`,
@@ -412,7 +412,7 @@ async function evaluateWithLLM(info, metrics) {
     info.llmDecision = result;
     if (result.decision === 'YES') {
       await tgScreener([
-        `🤖 <b>LLM says YES!</b> — ${info.symbol}`,
+        `🤖 <b>LLM says YES!</b> — ${info.symbol} (<code>${info.token.slice(0,10)}&hellip;</code>)`,
         `<code>${info.token}</code>`,
         ``,
         `Confidence: ${result.confidence}`,
@@ -445,7 +445,7 @@ async function sendPeriodicSummary() {
     lines.push(`<b>Top 5 by score:</b>`);
     for (let i = 0; i < top5.length; i++) {
       const t = top5[i];
-      lines.push(`${i + 1}. ${t.symbol} — ${t.compositeScore}/100 (${t.lastGradPct.toFixed(1)}%)`);
+      lines.push(`${i + 1}. ${t.symbol} (<code>${t.token.slice(0,10)}&hellip;</code>) — ${t.compositeScore}/100 (${t.lastGradPct.toFixed(1)}%)`);
     }
   } else {
     lines.push(`No scored tokens yet. Let data accumulate.`);
@@ -457,7 +457,7 @@ async function sendPeriodicSummary() {
 // ===== NOTIFY CANDIDATE =====
 async function notifyCandidate(info, metrics) {
   const msg = [
-    `🏆 <b>Pool candidate</b> — ${info.symbol}`,
+    `🏆 <b>Pool candidate</b> — ${info.symbol} (<code>${info.token.slice(0,10)}&hellip;</code>)`,
     `<code>${info.token}</code>`,
     ``,
     `📊 graduation: ${metrics.grad.toFixed(1)}% (≥ ${CFG.minGraduationPct}%)`,
@@ -469,7 +469,7 @@ async function notifyCandidate(info, metrics) {
     `<i>Run poolmaker to create V4 pool at curve price</i>`,
   ].join('\n');
   await tgScreener(msg);
-  console.log(`>>> CANDIDATE: ${info.symbol} — grad=${metrics.grad}% age=${metrics.ageHours}h buyers=${metrics.buyerCount} vol=${metrics.volume1hEth} ETH score=${metrics.compositeScore}`);
+  console.log(`>>> CANDIDATE: ${info.symbol} (${info.token}) — grad=${metrics.grad}% age=${metrics.ageHours}h buyers=${metrics.buyerCount} vol=${metrics.volume1hEth} ETH score=${metrics.compositeScore}`);
 }
 
 // ===== STATE PERSISTENCE =====
@@ -701,7 +701,7 @@ async function evaluateAndNotify(provider, blockNumber, isInitial = false) {
     if (isInitial || info.lastBuyBlock > blockNumber - 100 || info.passedCriteria) {
       const flag = allOk ? '✅' : info.notified ? '🔔' : '  ';
       const gmgnTag = info.gmgnChecked ? (info.gmgnFlaggedRisk ? '⚠GMGN' : '✓GMGN') : '  GMGN?';
-      console.log(`${flag} ${info.symbol.padEnd(10)} grad=${info.lastGradPct.toFixed(1).padEnd(6)} buyers=${String(metrics.buyerCount).padEnd(3)} vol1h=${metrics.volume1hEth.toFixed(4).padEnd(10)} score=${String(metrics.compositeScore).padEnd(4)} ${allOk ? '✅ALL' : 'FAIL=' + Object.entries(passes).filter(([,v]) => !v).map(([k]) => k).join(',')} ${gmgnTag}`);
+      console.log(`${flag} ${info.symbol.padEnd(10)} ${info.token.slice(0,8)}&hellip; grad=${info.lastGradPct.toFixed(1).padEnd(6)} buyers=${String(metrics.buyerCount).padEnd(3)} vol1h=${metrics.volume1hEth.toFixed(4).padEnd(10)} score=${String(metrics.compositeScore).padEnd(4)} ${allOk ? '✅ALL' : 'FAIL=' + Object.entries(passes).filter(([,v]) => !v).map(([k]) => k).join(',')} ${gmgnTag}`);
     }
   }
   if (isInitial) {
